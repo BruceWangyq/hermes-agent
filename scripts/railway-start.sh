@@ -2,8 +2,41 @@
 set -euo pipefail
 
 export HERMES_HOME="${HERMES_HOME:-/opt/data}"
+INSTALL_DIR="${HERMES_INSTALL_DIR:-/opt/hermes}"
 
-mkdir -p "${HERMES_HOME}/workspace"
+if [[ -f "${INSTALL_DIR}/.venv/bin/activate" ]]; then
+  # Railway's start command can run without the Docker entrypoint's activated
+  # shell environment, so make the Hermes console script available explicitly.
+  source "${INSTALL_DIR}/.venv/bin/activate"
+fi
+
+if ! command -v hermes >/dev/null 2>&1; then
+  if [[ -x "${INSTALL_DIR}/.venv/bin/hermes" ]]; then
+    export PATH="${INSTALL_DIR}/.venv/bin:${PATH}"
+  else
+    echo "Refusing to start: hermes executable was not found in PATH or ${INSTALL_DIR}/.venv/bin."
+    exit 69
+  fi
+fi
+
+mkdir -p "${HERMES_HOME}"/{cron,sessions,logs,hooks,memories,skills,skins,plans,workspace,home}
+
+if [[ ! -f "${HERMES_HOME}/.env" && -f "${INSTALL_DIR}/.env.example" ]]; then
+  cp "${INSTALL_DIR}/.env.example" "${HERMES_HOME}/.env"
+fi
+
+if [[ ! -f "${HERMES_HOME}/config.yaml" && -f "${INSTALL_DIR}/cli-config.yaml.example" ]]; then
+  cp "${INSTALL_DIR}/cli-config.yaml.example" "${HERMES_HOME}/config.yaml"
+fi
+
+if [[ ! -f "${HERMES_HOME}/SOUL.md" && -f "${INSTALL_DIR}/docker/SOUL.md" ]]; then
+  cp "${INSTALL_DIR}/docker/SOUL.md" "${HERMES_HOME}/SOUL.md"
+fi
+
+if [[ ! -f "${HERMES_HOME}/auth.json" && -n "${HERMES_AUTH_JSON_BOOTSTRAP:-}" ]]; then
+  printf '%s' "${HERMES_AUTH_JSON_BOOTSTRAP}" > "${HERMES_HOME}/auth.json"
+  chmod 600 "${HERMES_HOME}/auth.json"
+fi
 
 if [[ -n "${PORT:-}" && -z "${TELEGRAM_WEBHOOK_PORT:-}" ]]; then
   export TELEGRAM_WEBHOOK_PORT="${PORT}"
